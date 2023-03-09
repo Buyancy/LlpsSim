@@ -32,3 +32,7 @@ data
 
 # Ignore things from syncthing. 
 .stfolder
+
+# Ignore the data files. 
+data/
+data/*
