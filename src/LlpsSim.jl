@@ -3,7 +3,7 @@ module LlpsSim
 using Random, Distributions, LinearAlgebra, Distances, Clustering
 using ThreadsX, MultivariateStats, Plots, ProgressMeter, Memoize
 
-export compute_phases, generate_random_interaction_matrix, estimate_phase_pdf
+export generate_random_interaction_matrix, estimate_phase_pdf, count_phases, get_phases, evolve_dynamics
 
 """
 Generate a random, symmetric interaction matrix χ and return it. 
@@ -177,7 +177,7 @@ Evolve the interaction dynamics of χ using the given initial conditions to its 
 - `tolerance::Real = 1e-4`: The tolerance for determining whether or not the simulation has converged. 
 
 # Returns: 
-The final composition of all of the phases.
+The final composition of all of the volumes.
 """
 function evolve_dynamics(
         χ::Matrix, 
@@ -186,6 +186,7 @@ function evolve_dynamics(
         tracker_interval::Real = 10.0,
         tolerance::Real = 1e-4
     )::Matrix
+
     ϕ = deepcopy( ϕ_initial )
     ϕ_last = zeros(size(ϕ))
 
@@ -278,6 +279,50 @@ function estimate_phase_pdf(χ::Matrix; n_samples::Integer=64)::Vector{Integer}
 
     return n_phases
 end # function estimate_phase_pdf
+
+
+"""
+Characterize the phases that are present in the final stage of the simulation. 
+This is done by clustering the volumes based on their components and then taking 
+the mean values of each component in the volume. 
+
+# Arguments: 
+- `ϕ::Matrix`: The final, stable state of the simulation. 
+
+# Returns: 
+A `Vector` that contains `Vector`s of `Real`s, each of which represents the composition of one 
+of the phases. 
+"""
+function get_phases(ϕ::Matrix)::Vector{Vector{Real}}
+    # Perform the same clustering as in the phase counting function. 
+    dists = pairwise(Euclidean(), transpose(ϕ), dims=2)
+    hc = hclust(dists, linkage=:ward)
+    cut = cutree(hc, h=1e-2)
+    
+    # Cut holds the index of each group for each volume. 
+    N = size(ϕ, 2)
+    M = size(ϕ, 1)
+    groups = unique(cut)
+    phase_groups = [ Vector{Vector{Float64}}() for _ in 1:length(groups) ]
+
+    # Sort the volumes by the phase classification. 
+    for group ∈ groups 
+        for i in 1:M 
+            if cut[i] == group 
+                volume = ϕ[i,:]
+                push!(phase_groups[group], deepcopy(volume)) 
+            end # if i == group 
+        end # for i in 1:M
+    end # for group in unique(cut) 
+
+    # Take the mean accross the vector of volumes. 
+    phases = map((x) -> mean(x, dims=2)[1], phase_groups)
+
+    # Return the unique phases. 
+    return phases
+
+end
+
 
 """
 Generate and return the description matrices. 

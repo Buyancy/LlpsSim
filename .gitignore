@@ -25,3 +25,7 @@ Manifest.toml
 
 # Ignore the .DS_store on macs. 
 .DS_store
+
+# Ignore the data files. 
+data/
+data/*
