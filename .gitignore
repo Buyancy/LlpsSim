@@ -25,3 +25,10 @@ Manifest.toml
 
 # Ignore the .DS_store on macs. 
 .DS_store
+
+# Ignore directories relating to data and such. 
+data/*
+data
+
+# Ignore things from syncthing. 
+.stfolder
