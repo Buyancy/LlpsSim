@@ -132,6 +132,11 @@ end # function identify_matrix_evolution
 """
 A function that will return a function that is the same as in the paper (Eq. 5)
 based on the parameters given. 
+
+# Arguments: 
+- `target_phase_number::Int`: The target number of phases we wish to hit. 
+- `w::Real`: The penalty factor. (See paper.)
+- `n_samples::Integer=32`: The number of samples to use for estimating the phase number distribution.
 """
 function target_phase_objective_function(
     target_phase_number::Int, 
