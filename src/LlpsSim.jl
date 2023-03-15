@@ -5,7 +5,7 @@ include("Evolution.jl")
 using Random, Distributions, LinearAlgebra, Distances, Clustering
 using ThreadsX, MultivariateStats, Plots, ProgressMeter, Memoize
 
-export generate_random_interaction_matrix, estimate_phase_pdf, count_phases, get_phases, evolve_dynamics
+export generate_random_interaction_matrix, sample_phase_counts, sample_phases, count_phases, get_phases, evolve_dynamics
 
 """
 Generate a random, symmetric interaction matrix χ and return it. 
