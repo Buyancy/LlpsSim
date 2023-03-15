@@ -182,12 +182,12 @@ Evolve the interaction dynamics of χ using the given initial conditions to its 
 The final composition of all of the volumes.
 """
 function evolve_dynamics(
-        χ::Matrix, 
-        ϕ_initial::Matrix;
-        ∇t_initial::Real = 1.0, 
-        tracker_interval::Real = 10.0,
-        tolerance::Real = 1e-4
-    )::Matrix
+    χ::Matrix, 
+    ϕ_initial::Matrix;
+    ∇t_initial::Real = 1.0, 
+    tracker_interval::Real = 10.0,
+    tolerance::Real = 1e-4
+)::Matrix
 
     ϕ = deepcopy( ϕ_initial )
     ϕ_last = zeros(size(ϕ))
@@ -274,13 +274,13 @@ starting from different random starting conditions.
 # Returns: 
 An array of the samples. 
 """
-function estimate_phase_pdf(χ::Matrix; n_samples::Integer=64)::Vector{Integer}
+function sample_phase_counts(χ::Matrix; n_samples::Integer)::Vector{Integer}
     N = size(χ, 1)
     
     n_phases = ThreadsX.collect(count_phases(evolve_dynamics(χ, generate_starting_phases(N+2, N))) for _ in 1:n_samples)
 
     return n_phases
-end # function estimate_phase_pdf
+end # function sample_phase_counts
 
 
 """
@@ -325,6 +325,26 @@ function get_phases(ϕ::Matrix)::Vector{Vector{Real}}
 
 end
 
+"""
+Sample the phases in the end result from `n_samples` iterations of the simulaition 
+starting from different random starting conditions. 
+
+# Arguments: 
+- `χ::Matrix`: The interaction matrix we are testing. 
+- `n_samples::Integer`: The number of samples to return. 
+
+# Returns: 
+An array of the samples. This is a `Vector{Vector{Vector{Real}}}`, which is a `Vector` containing
+`Vectors` of the different phases for each of the `n_samples` samples. 
+"""
+function sample_phases(χ::Matrix; n_samples::Integer)::Vector{Vector{Vector{Real}}}
+    N = size(χ, 1)
+    
+    phases = ThreadsX.collect(get_phases(evolve_dynamics(χ, generate_starting_phases(N+2, N))) for _ in 1:n_samples)
+
+    return phases
+end # function sample_phase_counts
+
 
 """
 Generate and return the description matrices. 
@@ -340,10 +360,10 @@ A tuple of (mean, stds) where each one is a matrix containing the
 statistics for the given values in it. 
 """
 function generate_discription_matrices(
-        μs::Vector{Float64}, 
-        σs::Vector{Float64}; 
-        n_samples::Integer=64
-    )
+    μs::Vector{Float64}, 
+    σs::Vector{Float64}; 
+    n_samples::Integer=64
+)
 
     p = Progress(length(μs)*length(σs))
 
@@ -353,7 +373,7 @@ function generate_discription_matrices(
     for (i, μ) in enumerate(μs) 
         for (j, σ) in enumerate(σs) 
             χ = generate_random_interaction_matrix(10, μ, σ)
-            samples = estimate_phase_pdf(χ, n_samples=n_samples)
+            samples = estimate_phase_pdf(χ, n_samples)
             means[i,j] = mean(samples)
             stds[i,j] = std(samples)
             next!(p)
