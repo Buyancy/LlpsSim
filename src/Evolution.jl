@@ -132,6 +132,14 @@ end # function identify_matrix_evolution
 """
 A function that will return a function that is the same as in the paper (Eq. 5)
 based on the parameters given. 
+
+# Arguments: 
+- `target_phase_number::Int`: The target number of phases we wish to hit. 
+- `w::Real`: The penalty factor. (See paper.)
+- `n_samples::Integer=32`: The number of samples to use for estimating the phase number distribution.
+
+# Returns: 
+A function that takes a `Matrix` and will return a `Real` which computes the objective function. 
 """
 function target_phase_objective_function(
     target_phase_number::Int, 
@@ -257,6 +265,43 @@ function evolutionary_algorithm(
     end
 
 end # function evolutionary_algorithm
+
+
+"""
+An objective function that will optimmize for two different phase counts when a specific 
+interaction is "knocked out" (made to be zero in the matrix).
+
+# Arguments: 
+- `first_target_phase_number::Int`: The target number of phases we wish to hit without the "knockout". 
+- `second_target_phase_number::Int`: The target number of phases we wish to hit with the "knockout". 
+- `w::Real`: The penalty factor. (See paper.)
+- `n_samples::Integer=32`: The number of samples to use for estimating the phase number distribution.
+
+# Returns: 
+A function that takes a `Matrix` and will return a `Real` which computes the objective function. 
+"""
+function two_phase_objective_function(
+    first_target_phase_number::Int, 
+    second_target_phase_number::Int,
+    w::Real; 
+    n_samples::Integer=32
+)
+
+    first_objective = target_phase_objective_function(first_target_phase_number, w, n_samples=n_samples)
+    second_objective = target_phase_objective_function(second_target_phase_number, w, n_samples=n_samples)
+
+    @memoize function objective(χ::Matrix)::Real
+        χ = deepcopy(χ)
+        a = first_objective(χ)
+        χ[1,2] = 0.0
+        χ[2,1] = 0.0
+        b = second_objective(χ)
+        return mean([a, b])
+    end
+
+    return objective 
+
+end # function two_phase_objective_function
 
 
 
