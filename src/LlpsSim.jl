@@ -11,14 +11,14 @@ export generate_random_interaction_matrix, sample_phase_counts, sample_phases, c
 Generate a random, symmetric interaction matrix χ and return it. 
 
 # Arguments 
-- `N::Integer`: The number of components. 
-- `μ::Real`: The mean of the values.  
-- `σ::Real`: The standard deviation of the values. 
+- `N::Int64`: The number of components. 
+- `μ::Float64`: The mean of the values.  
+- `σ::Float64`: The standard deviation of the values. 
 
 # Returns: 
 The random interaction matrix χ. 
 """
-function generate_random_interaction_matrix(N::Integer, μ::Real, σ::Real)::Matrix
+function generate_random_interaction_matrix(N::Int64, μ::Float64, σ::Float64)::Matrix{Float64}
     χ = zeros(N,N)
     for i in 1:N
         for j in (i+1):N
@@ -35,13 +35,13 @@ Generate and return a starting condition for the phases.
 The components will sum to less than one, leaving room for the solvent.  
 
 # Arguments: 
-- `num_phases::Integer`: The number of phases to produce. 
-- `num_comps::Integer`: The number of different compositions to make out of the phases. 
+- `num_phases::Int64`: The number of phases to produce. 
+- `num_comps::Int64`: The number of different compositions to make out of the phases. 
 
 # Returns: 
 A matrix of the different compositions of phases. 
 """
-function generate_starting_phases(num_phases::Integer, num_comps::Integer)::Matrix
+function generate_starting_phases(num_phases::Int64, num_comps::Int64)::Matrix{Float64}
     ϕs = zeros(num_phases, num_comps)
     for n in 1:num_phases
         phi_max = 1.0
@@ -61,13 +61,13 @@ Calculate the chemical potential for each phase and the pressure.
 
 # Arguments: 
 - `ϕ::Vector{Float64}`: The fractions of the phases. 
-- `χ::Matrix`: The interaction matrix. 
+- `χ::Matrix{Float64}`: The interaction matrix. 
 
 # Returns 
 A tuple `(μ, p)` containing the chemical potential and pressure for each phase. 
-`μ` is a `Vector` and `p` is a `Real`.
+`μ` is a `Vector` and `p` is a `Float64`.
 """
-function calc_diffs(ϕ::Vector{Float64}, χ::Matrix)::Tuple{Vector, Real}
+function calc_diffs(ϕ::Vector{Float64}, χ::Matrix{Float64})::Tuple{Vector, Float64}
     ϕ_sol = 1 - sum(ϕ)
 
     if ϕ_sol < 0  # Sanity check. 
@@ -95,13 +95,13 @@ end # function calc_diffs
 Compute the rates of change for all of the compositions. 
 
 # Arguments 
-- `ϕ::Matrix`: The compositions of the components. 
-- `χ::Matrix`: The interaction matrix for the components. 
+- `ϕ::Matrix{Float64}`: The compositions of the components. 
+- `χ::Matrix{Float64}`: The interaction matrix for the components. 
 
 # Returns 
 The rate of change of the composition (Eq. 4) in the different phases. 
 """
-function evolution_rate(ϕ::Matrix, χ::Matrix)::Matrix
+function evolution_rate(ϕ::Matrix{Float64}, χ::Matrix{Float64})::Matrix{Float64}
     num_phases, num_comps = size(ϕ)
 
     # get chemical potential and pressure for all components and phases
@@ -134,15 +134,15 @@ Evolves a system with the given interactions using the given time step and numbe
 Repeatedly updates the system by adding (Eq. 4) multiplied by the time step. 
 
 # Arguments: 
-- `ϕ::Matrix`: The compositions of the phases. 
-- `χ::Matrix`: The component interaction matrix. 
-- `∇t::Real`: The time steps of the simulation. 
-- `steps::Integer`: The number of simulation steps. 
+- `ϕ::Matrix{Float64}`: The compositions of the phases. 
+- `χ::Matrix{Float64}`: The component interaction matrix. 
+- `∇t::Float64`: The time steps of the simulation. 
+- `steps::Int64`: The number of simulation steps. 
 
 # Returns: 
 The new, updated ϕ.
 """
-function iterate_inner(ϕ::Matrix, χ::Matrix, ∇t::Real, steps::Integer)::Matrix
+function iterate_inner(ϕ::Matrix{Float64}, χ::Matrix{Float64}, ∇t::Float64, steps::Int64)::Matrix{Float64}
 
     tϕ = deepcopy(ϕ)
 
@@ -172,22 +172,22 @@ end # function iterate_inner
 Evolve the interaction dynamics of χ using the given initial conditions to its final, stable state. 
 
 # Arguments:
-- `χ::Matrix`: The interaction dynamics of the components. 
-- `ϕ_initial::Matrix`: The initial consentration of the components. 
-- `∇t_initial::Real = 1.0`: The initial time step. 
-- `tracker_interval::Real = 10.0`: The initial number of steps to observe for when iterating each step. 
-- `tolerance::Real = 1e-4`: The tolerance for determining whether or not the simulation has converged. 
+- `χ::Matrix{Float64}`: The interaction dynamics of the components. 
+- `ϕ_initial::Matrix{Float64}`: The initial consentration of the components. 
+- `∇t_initial::Float64 = 1.0`: The initial time step. 
+- `tracker_interval::Float64 = 10.0`: The initial number of steps to observe for when iterating each step. 
+- `tolerance::Float64 = 1e-4`: The tolerance for determining whether or not the simulation has converged. 
 
 # Returns: 
 The final composition of all of the volumes.
 """
 function evolve_dynamics(
-    χ::Matrix, 
-    ϕ_initial::Matrix;
-    ∇t_initial::Real = 1.0, 
-    tracker_interval::Real = 10.0,
-    tolerance::Real = 1e-4
-)::Matrix
+    χ::Matrix{Float64}, 
+    ϕ_initial::Matrix{Float64};
+    ∇t_initial::Float64 = 1.0, 
+    tracker_interval::Float64 = 10.0,
+    tolerance::Float64 = 1e-4
+)::Matrix{Float64}
 
     ϕ = deepcopy( ϕ_initial )
     ϕ_last = zeros(size(ϕ))
@@ -244,12 +244,12 @@ is cut at the `1e-2` level. (This value was chosen in the paper and we should
 experiment more in the future about this value.)
 
 # Arguments 
-- `ϕ::Matrix`: The final state that we are counting the phases in. 
+- `ϕ::Matrix{Float64}`: The final state that we are counting the phases in. 
 
 # Returns 
 The number of phases present. 
 """
-function count_phases(ϕ::Matrix)::Integer
+function count_phases(ϕ::Matrix{Float64})::Int64
     # Compute the pairwise distnaces between the phases. 
     # ϕ is indexed (phases, comps)
     dists = pairwise(Euclidean(), transpose(ϕ), dims=2)
@@ -268,13 +268,13 @@ Sample the number of phases in the end result from `n_samples` iterations of the
 starting from different random starting conditions. 
 
 # Arguments: 
-- `χ::Matrix`: The interaction matrix we are testing. 
-- `n_samples::Integer`: The number of samples to return. 
+- `χ::Matrix{Float64}`: The interaction matrix we are testing. 
+- `n_samples::Int64`: The number of samples to return. 
 
 # Returns: 
 An array of the samples. 
 """
-function sample_phase_counts(χ::Matrix; n_samples::Integer)::Vector{Integer}
+function sample_phase_counts(χ::Matrix{Float64}; n_samples::Int64)::Vector{Int64}
     N = size(χ, 1)
     
     n_phases = ThreadsX.collect(count_phases(evolve_dynamics(χ, generate_starting_phases(N+2, N))) for _ in 1:n_samples)
@@ -289,13 +289,13 @@ This is done by clustering the volumes based on their components and then taking
 the mean values of each component in the volume. 
 
 # Arguments: 
-- `ϕ::Matrix`: The final, stable state of the simulation. 
+- `ϕ::Matrix{Float64}`: The final, stable state of the simulation. 
 
 # Returns: 
-A `Vector` that contains `Vector`s of `Real`s, each of which represents the composition of one 
+A `Vector` that contains `Vector`s of `Float64`s, each of which represents the composition of one 
 of the phases. 
 """
-function get_phases(ϕ::Matrix)::Vector{Vector{Real}}
+function get_phases(ϕ::Matrix{Float64})::Vector{Vector{Float64}}
     # Perform the same clustering as in the phase counting function. 
     dists = pairwise(Euclidean(), transpose(ϕ), dims=2)
     hc = hclust(dists, linkage=:ward)
@@ -330,14 +330,14 @@ Sample the phases in the end result from `n_samples` iterations of the simulaiti
 starting from different random starting conditions. 
 
 # Arguments: 
-- `χ::Matrix`: The interaction matrix we are testing. 
-- `n_samples::Integer`: The number of samples to return. 
+- `χ::Matrix{Float64}`: The interaction matrix we are testing. 
+- `n_samples::Int64`: The number of samples to return. 
 
 # Returns: 
-An array of the samples. This is a `Vector{Vector{Vector{Real}}}`, which is a `Vector` containing
+An array of the samples. This is a `Vector{Vector{Vector{Float64}}}`, which is a `Vector` containing
 `Vectors` of the different phases for each of the `n_samples` samples. 
 """
-function sample_phases(χ::Matrix; n_samples::Integer)::Vector{Vector{Vector{Real}}}
+function sample_phases(χ::Matrix{Float64}; n_samples::Int64)::Vector{Vector{Vector{Float64}}}
     N = size(χ, 1)
     
     phases = ThreadsX.collect(get_phases(evolve_dynamics(χ, generate_starting_phases(N+2, N))) for _ in 1:n_samples)
@@ -362,7 +362,7 @@ statistics for the given values in it.
 function generate_discription_matrices(
     μs::Vector{Float64}, 
     σs::Vector{Float64}; 
-    n_samples::Integer=64
+    n_samples::Int64=64
 )
 
     p = Progress(length(μs)*length(σs))
