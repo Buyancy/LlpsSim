@@ -5,7 +5,7 @@ using LlpsSim, Gen, Statistics, ProgressMeter, Random, Distributions, Memoize
 """
 Generate a matrix from a trace. 
 """
-function matrix_from_trace(trace, N::Integer)::Matrix
+function matrix_from_trace(trace, N::Int64)::Matrix{Float64}
     χ = zeros(N,N)
     for i in 1:N
         for j in (i+1):N
@@ -20,7 +20,7 @@ end
 A function to generate an interaction matrix for `N` components drawn from 
 a normal distribution with mean `μ` and standard deviation `σ`^2. 
 """
-@gen function generate_normal_interaction_matrix(N::Integer, μ::Real, σ::Real)
+@gen function generate_normal_interaction_matrix(N::Int64, μ::Float64, σ::Float64)
     χ = zeros(N, N)
     for i in 1:N
         for j in (i+1):N
@@ -35,7 +35,7 @@ end
 A function to generate an interaction matrix for `N` components drawn from 
 a uniform distribution with min `min` and max `max`. 
 """
-@gen function generate_uniform_interaction_matrix(N::Integer, min::Real, max::Real)
+@gen function generate_uniform_interaction_matrix(N::Int64, min::Float64, max::Float64)
     χ = zeros(N, N)
     for i in 1:N
         for j in (i+1):N
@@ -50,7 +50,7 @@ end
 Uses generative modeling (elaborate) to identify interaction matrices that optimize the 
 objective function. 
 """
-function identify_matrix(N::Integer, objective::Function, target::Real)
+function identify_matrix(N::Int64, objective::Function, target::Float64)
 
     # The model that we will use to generate and score our function. 
     @gen function interaction_model() 
@@ -135,20 +135,20 @@ based on the parameters given.
 
 # Arguments: 
 - `target_phase_number::Int`: The target number of phases we wish to hit. 
-- `w::Real`: The penalty factor. (See paper.)
-- `n_samples::Integer=32`: The number of samples to use for estimating the phase number distribution.
+- `w::Float64`: The penalty factor. (See paper.)
+- `n_samples::Int64=32`: The number of samples to use for estimating the phase number distribution.
 
 # Returns: 
-A function that takes a `Matrix` and will return a `Real` which computes the objective function. 
+A function that takes a `Matrix{Float64}` and will return a `Float64` which computes the objective function. 
 """
 function target_phase_objective_function(
     target_phase_number::Int, 
-    w::Real; 
-    n_samples::Integer=32
+    w::Float64; 
+    n_samples::Int64=32
 )
 
     # The function that will do the computation. 
-    @memoize function g(χ::Matrix)::Real
+    @memoize function g(χ::Matrix{Float64})::Float64
         N = size(χ, 1)
         K_MAX = N+2 
         samples = LlpsSim.sample_phase_counts(χ, n_samples=n_samples)
@@ -166,33 +166,33 @@ Replicate the evolutionary algorithm in the paper to optimize a specific objecti
 
 # Arguments: 
 - `objective_function`: The function that the algorithm will try to maximize in each 
-    generation. The function should take in a `Matrix` χ representing the interaction matrix
-    and return a `Real` which would be the score. 
-- `POPULATION_SIZE::Integer=32`: The number of matrices in the "population" of the algorithm. 
-- `N::Integer=5`: The number of components in the simulation. 
-- `ITERATIONS::Integer=100`: The number of "generations" to use in the algotithm. 
+    generation. The function should take in a `Matrix{Float64}` χ representing the interaction matrix
+    and return a `Float64` which would be the score. 
+- `POPULATION_SIZE::Int64=32`: The number of matrices in the "population" of the algorithm. 
+- `N::Int64=5`: The number of components in the simulation. 
+- `ITERATIONS::Int64=100`: The number of "generations" to use in the algotithm. 
 - `RETURN_INTERMEDIATES::Bool=false`: Whether to return intermediate values in the simulation.
-- `χ_BOUND::Real=10.0`: The threshold to use for when we renormalize the matrices. 
+- `χ_BOUND::Float64=10.0`: The threshold to use for when we renormalize the matrices. 
 
 # Returns: 
 Will return different things depending on the value of `RETURN_INTERMEDIATES`. 
-If `RETURN_INTERMEDIATES` is false, then it will just return the optimal interaction `Matrix`
+If `RETURN_INTERMEDIATES` is false, then it will just return the optimal interaction `Matrix{Float64}`
 that was found through the evolutionary algorithm. 
-If `RETURN_INTERMEDIATES` is true, then it will return a tuple of `(Vector{Matrix}, Vector{Real}, Matrix)`
+If `RETURN_INTERMEDIATES` is true, then it will return a tuple of `(Vector{Matrix{Float64}}, Vector{Float64}, Matrix{Float64})`
 where the first two elements contain the best matrix and score from each generation respectively
 and the final element is the best overall matrix obtained by the algorithm. 
 """
 function evolutionary_algorithm(
     objective_function;
-    POPULATION_SIZE::Integer=32, 
-    N::Integer=5, 
-    ITERATIONS::Integer=100, 
+    POPULATION_SIZE::Int64=32, 
+    N::Int64=5, 
+    ITERATIONS::Int64=100, 
     RETURN_INTERMEDIATES::Bool=false, 
-    χ_BOUND::Real=10.0
+    χ_BOUND::Float64=10.0
 ) 
 
     # The "population" of the matrices that will be evolved over time. 
-    matrices = Vector{Matrix}()
+    matrices = Vector{Matrix{Float64}}()
     for _ in 1:POPULATION_SIZE
         χ = generate_uniform_interaction_matrix(N, -2, 5)
         push!(matrices, χ)
@@ -202,7 +202,7 @@ function evolutionary_algorithm(
 
 
     # A function that mutates a single matrix and returns it. 
-    function mutate_matrix(χ::Matrix)::Matrix 
+    function mutate_matrix(χ::Matrix{Float64})::Matrix{Float64} 
         χ_prime = zeros(size(χ))
         for i in 1:N
             for j in (i+1):N
@@ -222,8 +222,8 @@ function evolutionary_algorithm(
     end # function mutate_matrix
 
     if RETURN_INTERMEDIATES
-        intermediate_matrices = Vector{Matrix}()
-        intermediate_scores = Vector{Real}()
+        intermediate_matrices = Vector{Matrix{Float64}}()
+        intermediate_scores = Vector{Float64}()
     end
 
 
@@ -237,7 +237,7 @@ function evolutionary_algorithm(
         sort!(matrices, by=objective_function) # Sort the matrices by the objective function. 
 
         # Remove the bottom 30%
-        num_to_kill = convert(Integer, floor(length(matrices) * 0.3))
+        num_to_kill = convert(Int64, floor(length(matrices) * 0.3))
         for j in 1:num_to_kill
             popfirst!(matrices) # Remove the ones with the lowest objective function. 
         end
@@ -274,19 +274,19 @@ interaction is "knocked out" (made to be zero in the matrix).
 # Arguments: 
 - `first_target_phase_number::Int`: The target number of phases we wish to hit without the "knockout". 
 - `second_target_phase_number::Int`: The target number of phases we wish to hit with the "knockout". 
-- `w::Real`: The penalty factor. (See paper.)
-- `n_samples::Integer=32`: The number of samples to use for estimating the phase number distribution.
+- `w::Float64`: The penalty factor. (See paper.)
+- `n_samples::Int64=32`: The number of samples to use for estimating the phase number distribution.
 
 # Returns: 
-A function that takes a `Matrix` and will return a `Real` which computes the objective function. 
+A function that takes a `Matrix{Float64}` and will return a `Float64` which computes the objective function. 
 """
 function two_phase_objective_function(
     first_target_phase_number::Int, 
     second_target_phase_number::Int,
-    w::Real; 
-    n_samples::Integer=32
+    w::Float64; 
+    n_samples::Int64=32
 )
-    @memoize function objective(χ::Matrix)::Real
+    @memoize function objective(χ::Matrix{Float64})::Float64
         χ1 = deepcopy(χ)
         χ2 = deepcopy(χ)
         χ2[1,2] = 0
