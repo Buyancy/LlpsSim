@@ -151,7 +151,7 @@ function target_phase_objective_function(
     @memoize function g(χ::Matrix)::Real
         N = size(χ, 1)
         K_MAX = N+2 
-        samples = LlpsSim.estimate_phase_pdf(χ, n_samples=n_samples)
+        samples = LlpsSim.sample_phase_counts(χ, n_samples=n_samples)
         P(k) = count((x) -> x == k, samples) / length(samples)
         return sum([ P(K) * exp(-(K-target_phase_number)^2 / (2 * w^2)) for K in 1:K_MAX])
     end # function g
@@ -286,17 +286,25 @@ function two_phase_objective_function(
     w::Real; 
     n_samples::Integer=32
 )
-
-    first_objective = target_phase_objective_function(first_target_phase_number, w, n_samples=n_samples)
-    second_objective = target_phase_objective_function(second_target_phase_number, w, n_samples=n_samples)
-
     @memoize function objective(χ::Matrix)::Real
-        χ = deepcopy(χ)
-        a = first_objective(χ)
-        χ[1,2] = 0.0
-        χ[2,1] = 0.0
-        b = second_objective(χ)
-        return mean([a, b])
+        χ1 = deepcopy(χ)
+        χ2 = deepcopy(χ)
+        χ2[1,2] = 0
+        χ2[2,1] = 0
+        N = size(χ, 1)
+        K_MAX = N+2 
+        samples_1 = LlpsSim.sample_phase_counts(χ1, n_samples=n_samples)
+        samples_2 = LlpsSim.sample_phase_counts(χ2, n_samples=n_samples)
+        P1(k) = count((x) -> x == k, samples_1) / length(samples_1)
+        P2(k) = count((x) -> x == k, samples_2) / length(samples_2)
+        terms = []
+        for K1 in 1:K_MAX
+            for K2 in 1:K_MAX
+                t = exp( -((K1-first_target_phase_number)^2 * (K2-second_target_phase_number)^2) / (2*w^2) ) * P1(K1) * P2(K2)
+                push!(terms, t)
+            end
+        end
+        return sum(terms)
     end
 
     return objective 
