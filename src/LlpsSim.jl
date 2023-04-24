@@ -1,11 +1,13 @@
 module LlpsSim
 
 include("Evolution.jl")
+include("Utils.jl")
 
 using Random, Distributions, LinearAlgebra, Distances, Clustering
 using ThreadsX, MultivariateStats, Plots, ProgressMeter, Memoize
 
 export generate_random_interaction_matrix, sample_phase_counts, sample_phases, count_phases, get_phases, evolve_dynamics
+export Evolution
 
 """
 Generate a random, symmetric interaction matrix χ and return it. 
@@ -149,20 +151,20 @@ function iterate_inner(ϕ::Matrix{Float64}, χ::Matrix{Float64}, ∇t::Float64, 
     for _ in 1:steps 
         dϕ = ∇t * evolution_rate(tϕ, χ)
         tϕ = tϕ .+ dϕ
-
-        # Check for valid results. 
-        if any(map(isnan, tϕ))
-            error("Nan result in ϕ")
-        end
-        if any(map((x) -> x < 0.0, tϕ))
-            error("Non-positive concentrations:\n∇t=$∇t\ntϕ\n$(repr("text/plain", tϕ))\nϕ\n$(repr("text/plain", ϕ))\ndϕ\n$(repr("text/plain", dϕ))")
-        end
-        for i in 1:size(tϕ)[1]
-            if sum(tϕ[i,:]) < 0.0
-                error("Non-positive solvent concentrations:\n∇t=$∇t\ntϕ\n$(repr("text/plain", tϕ))\nϕ\n$(repr("text/plain", ϕ))\ndϕ\n$(repr("text/plain", dϕ))")
-            end
-        end
     end # for _ in 1:steps
+
+    # Check for valid results. 
+    if any(map(isnan, tϕ))
+        error("Nan result in ϕ")
+    end
+    if any(map((x) -> x < 0.0, tϕ))
+        error("Non-positive concentrations:\n∇t=$∇t\ntϕ\n$(repr("text/plain", tϕ))\nϕ\n$(repr("text/plain", ϕ))\ndϕ\n$(repr("text/plain", dϕ))")
+    end
+    for i in 1:size(tϕ)[1]
+        if sum(tϕ[i,:]) < 0.0
+            error("Non-positive solvent concentrations:\n∇t=$∇t\ntϕ\n$(repr("text/plain", tϕ))\nϕ\n$(repr("text/plain", ϕ))\ndϕ\n$(repr("text/plain", dϕ))")
+        end
+    end 
 
     return tϕ
 

@@ -37,7 +37,7 @@ julia> χ = generate_random_interaction_matrix(5, 2.0, 2.0)
   6.73549   6.63846   0.748687   1.60546   0.0
 
 julia> samples = sample_phase_counts(χ, 64)
-64-element Vector{Integer}:
+64-element Vector{Int64}:
 2
 3
 ⋮

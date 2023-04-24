@@ -194,30 +194,33 @@ function evolutionary_algorithm(
     # The "population" of the matrices that will be evolved over time. 
     matrices = Vector{Matrix{Float64}}()
     for _ in 1:POPULATION_SIZE
-        χ = generate_uniform_interaction_matrix(N, -2, 5)
+        χ = generate_uniform_interaction_matrix(N, -2.0, 5.0)
         push!(matrices, χ)
     end # for _ in 1:POPULATION_SIZE
 
     println("Finished generating initial matrix population.")
 
 
-    # A function that mutates a single matrix and returns it. 
+    # A function that mutates a single matrix in place. 
     function mutate_matrix(χ::Matrix{Float64})::Matrix{Float64} 
-        χ_prime = zeros(size(χ))
         for i in 1:N
             for j in (i+1):N
-                χ_prime[i,j] = rand(Normal(χ[i,j], 0.1)) # Standard gaussian drift. 
-                χ_prime[j,i] = χ_prime[i,j]
+                χ[i,j] = rand(Normal(χ[i,j], 0.1)) # Standard gaussian drift. 
+                χ[j,i] = χ[i,j]
             end
         end
 
         # Renormalize so that the values don't "blow up". 
         if mean(χ) > χ_BOUND 
             m = mean(χ)
-            χ = map((x) -> x * (χ_BOUND / m), χ)
+            for i in 1:N
+                for j in 1:N
+                    χ[i,j] = χ[i,j] * (χ_BOUND / m)
+                end
+            end
         end
 
-        return χ_prime
+        return χ
         
     end # function mutate_matrix
 
@@ -230,22 +233,18 @@ function evolutionary_algorithm(
     # Iteratively improve the population. 
     @showprogress 1 "Evolving matrices..." for i in 1:ITERATIONS
         # Mutate
-        matrices = map(mutate_matrix, matrices)
-
-        # Sort the matrices by the scoring function. 
-        # scores = get_score_dict(matrices)
-        sort!(matrices, by=objective_function) # Sort the matrices by the objective function. 
-
-        # Remove the bottom 30%
-        num_to_kill = convert(Int64, floor(length(matrices) * 0.3))
-        for j in 1:num_to_kill
-            popfirst!(matrices) # Remove the ones with the lowest objective function. 
+        # map(mutate_matrix, matrices)
+        for i in 1:N
+            mutate_matrix(matrices[i])
         end
 
-        # Select random good ones to replace. 
-        reverse!(matrices) # But the good ones at the front. 
-        for j in 1:num_to_kill
-            push!(matrices, deepcopy(matrices[j]))
+        # Sort the matrices by the scoring function. 
+        sort!(matrices, by=objective_function) # Sort the matrices by the objective function. 
+
+        # Replace the bottom 30%.
+        num_to_kill = convert(Int64, floor(length(matrices) * 0.3))
+        for i in 1:num_to_kill
+            matrices[i] = deepcopy(matrices[end-(i-1)])
         end
 
         if RETURN_INTERMEDIATES
@@ -287,24 +286,37 @@ function two_phase_objective_function(
     n_samples::Int64=32
 )
     @memoize function objective(χ::Matrix{Float64})::Float64
-        χ1 = deepcopy(χ)
+        χ1 = χ
         χ2 = deepcopy(χ)
-        χ2[1,2] = 0
-        χ2[2,1] = 0
+        
+        # Knockout all of the interactions involving the first phase. 
         N = size(χ, 1)
+        for i in 1:N
+            χ2[1,i] = 0
+            χ2[i,1] = 0
+        end
+
+        # Score the two matrices.
         K_MAX = N+2 
         samples_1 = LlpsSim.sample_phase_counts(χ1, n_samples=n_samples)
         samples_2 = LlpsSim.sample_phase_counts(χ2, n_samples=n_samples)
-        P1(k) = count((x) -> x == k, samples_1) / length(samples_1)
-        P2(k) = count((x) -> x == k, samples_2) / length(samples_2)
-        terms = []
+        l1 = length(samples_1)
+        l2 = length(samples_2) 
+        p1 = [count((x) -> x == k, samples_1) for x in 1:K_MAX]
+        p2 = [count((x) -> x == k, samples_2) for x in 1:K_MAX]
+        P1(k) = p1[k] / l1
+        P2(k) = p2[k] / l2
+        # terms = []
+        s = 0 
         for K1 in 1:K_MAX
             for K2 in 1:K_MAX
                 t = exp( -((K1-first_target_phase_number)^2 * (K2-second_target_phase_number)^2) / (2*w^2) ) * P1(K1) * P2(K2)
-                push!(terms, t)
+                # push!(terms, t)
+                s += t 
             end
         end
-        return sum(terms)
+        # return sum(terms)
+        return s 
     end
 
     return objective 
