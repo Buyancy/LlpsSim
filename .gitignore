@@ -36,3 +36,7 @@ data
 # Ignore the data files. 
 data/
 data/*
+
+# Ignore script files. 
+scripts/
+scripts/*

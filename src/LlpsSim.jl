@@ -4,7 +4,7 @@ include("Evolution.jl")
 include("Utils.jl")
 
 using Random, Distributions, LinearAlgebra, Distances, Clustering
-using ThreadsX, MultivariateStats, Plots, ProgressMeter, Memoize
+using ThreadsX, MultivariateStats, Plots, ProgressMeter, Memoize, LoopVectorization
 
 export generate_random_interaction_matrix, sample_phase_counts, sample_phases, count_phases, get_phases, evolve_dynamics
 export Evolution
@@ -69,28 +69,39 @@ Calculate the chemical potential for each phase and the pressure.
 A tuple `(μ, p)` containing the chemical potential and pressure for each phase. 
 `μ` is a `Vector` and `p` is a `Float64`.
 """
-function calc_diffs(ϕ::Vector{Float64}, χ::Matrix{Float64})::Tuple{Vector, Float64}
+function calc_diffs(ϕ::Vector{Float64}, χ::Matrix{Float64}, μ::Vector{Float64})::Float64#Tuple{Vector, Float64}
     ϕ_sol = 1 - sum(ϕ)
 
     if ϕ_sol < 0  # Sanity check. 
-        error("Solvent has negative concentration: ϕ_sol=$ϕ_sol")
+        error("Solvent has negative concentration")
     end
     if any(map((x) -> x < 0.0, ϕ))  # Sanity check. 
-        error("Negative component concentration: ϕ=$ϕ")
+        error("Negative component concentration")
     end
 
     log_ϕ_sol = log(ϕ_sol)
-    μ = map(log, ϕ)
+    # μ = map(log, ϕ)
+    map!(log, μ, ϕ)
     p = -1 * log_ϕ_sol
     for i in 1:length(ϕ)
         v = dot( χ[i,:], ϕ )
+        # v = adot( χ[i,:], ϕ )
         μ[i] += v - log_ϕ_sol
         p += 0.5 * v * ϕ[i]
     end # for i in 1:length(ϕ)
 
-    return μ, p
+    # return μ, p
+    return p
 
 end # function calc_diffs
+
+# function adot(a::Vector{Float64}, b::Vector{Float64})
+#     s = 0.0
+#     @turbo for i ∈ eachindex(a)
+#         s += a[i] + b[i]
+#     end
+#     s
+# end
 
 
 """
@@ -103,20 +114,35 @@ Compute the rates of change for all of the compositions.
 # Returns 
 The rate of change of the composition (Eq. 4) in the different phases. 
 """
-function evolution_rate(ϕ::Matrix{Float64}, χ::Matrix{Float64})::Matrix{Float64}
+function evolution_rate(ϕ::Matrix{Float64}, χ::Matrix{Float64}; 
+    μ::Union{Nothing, Matrix{Float64}}=nothing, 
+    p::Union{Nothing, Vector{Float64}}=nothing, 
+    dc::Union{Nothing, Matrix{Float64}}=nothing
+)#::Matrix{Float64}
     num_phases, num_comps = size(ϕ)
 
     # get chemical potential and pressure for all components and phases
-    μ = zeros(num_phases, num_comps)
-    p = zeros(num_phases)
+
+    # The buffers where we will store the chemical potentials and pressures. 
+    if !isnothing(μ) && !isnothing(p) && !isnothing(dc)
+        # The memory is already allocated. 
+    else # Allocate the memory. 
+        μ = zeros(Float64, num_phases, num_comps)
+        p = zeros(Float64, num_phases)
+        dc = zeros(num_phases, num_comps)
+    end
+    
+    tμ = zeros(num_comps)
     for i in 1:num_phases
-        tμ, tp = calc_diffs(ϕ[i, :], χ)
+        # tμ, tp = calc_diffs(ϕ[i, :], χ)
+        # tp = calc_diffs(ϕ[i, :], χ, tμ)
+        # μ[i,:] .= tμ
+        # p[i] = tp 
+        p[i] = calc_diffs(ϕ[i, :], χ, tμ)
         μ[i,:] .= tμ
-        p[i] = tp 
     end # for i in 1:num_phases
 
     # calculate rate of change of the composition in all phases
-    dc = zeros(num_phases, num_comps)
     for n in 1:num_phases
         for m in 1:num_phases
             ∇p = p[n] - p[m]
@@ -127,13 +153,14 @@ function evolution_rate(ϕ::Matrix{Float64}, χ::Matrix{Float64})::Matrix{Float6
         end # for m
     end # for n
 
-    return dc
+    # return dc
 
 end # function evolution_rate
 
 """
 Evolves a system with the given interactions using the given time step and number of steps. 
 Repeatedly updates the system by adding (Eq. 4) multiplied by the time step. 
+Updates `ϕ` in place. 
 
 # Arguments: 
 - `ϕ::Matrix{Float64}`: The compositions of the phases. 
@@ -141,32 +168,46 @@ Repeatedly updates the system by adding (Eq. 4) multiplied by the time step.
 - `∇t::Float64`: The time steps of the simulation. 
 - `steps::Int64`: The number of simulation steps. 
 
-# Returns: 
-The new, updated ϕ.
 """
-function iterate_inner(ϕ::Matrix{Float64}, χ::Matrix{Float64}, ∇t::Float64, steps::Int64)::Matrix{Float64}
+function iterate_inner(ϕ::Matrix{Float64}, χ::Matrix{Float64}, ∇t::Float64, steps::Int64;
+    μ_buffer::Union{Nothing, Matrix{Float64}}=nothing, 
+    p_buffer::Union{Nothing, Vector{Float64}}=nothing, 
+    dc_buffer::Union{Nothing, Matrix{Float64}}=nothing
+)#::Matrix{Float64}
 
-    tϕ = deepcopy(ϕ)
+    num_phases, num_comps = size(ϕ)
+    if !isnothing(μ_buffer) && !isnothing(p_buffer) && !isnothing(dc_buffer)
+        # The memory is already allocated. 
+    else # Allocate the memory. 
+        μ_buffer = zeros(Float64, num_phases, num_comps)
+        p_buffer = zeros(Float64, num_phases)
+        dc_buffer = zeros(Float64, num_phases, num_comps)
+    end
 
     for _ in 1:steps 
-        dϕ = ∇t * evolution_rate(tϕ, χ)
-        tϕ = tϕ .+ dϕ
+        for i in 1:num_phases # Zero the gradients. 
+            for j in 1:num_comps
+                dc_buffer[i,j] = 0.0
+            end
+        end
+        evolution_rate(ϕ, χ, μ=μ_buffer, p=p_buffer, dc=dc_buffer)
+        ϕ .+= ∇t * dc_buffer
     end # for _ in 1:steps
 
     # Check for valid results. 
-    if any(map(isnan, tϕ))
+    if any(map(isnan, ϕ))
         error("Nan result in ϕ")
     end
-    if any(map((x) -> x < 0.0, tϕ))
+    if any(map((x) -> x < 0.0, ϕ))
         error("Non-positive concentrations:\n∇t=$∇t\ntϕ\n$(repr("text/plain", tϕ))\nϕ\n$(repr("text/plain", ϕ))\ndϕ\n$(repr("text/plain", dϕ))")
     end
-    for i in 1:size(tϕ)[1]
-        if sum(tϕ[i,:]) < 0.0
+    for i in 1:size(ϕ)[1]
+        if sum(ϕ[i,:]) < 0.0
             error("Non-positive solvent concentrations:\n∇t=$∇t\ntϕ\n$(repr("text/plain", tϕ))\nϕ\n$(repr("text/plain", ϕ))\ndϕ\n$(repr("text/plain", dϕ))")
         end
     end 
 
-    return tϕ
+    # return tϕ
 
 end # function iterate_inner
 
@@ -207,6 +248,12 @@ function evolve_dynamics(
         return true
     end
 
+    # Create the buffers for the calculations so we don't need to reallocate. 
+    num_phases, num_comps = size(ϕ)
+    μ_buffer = zeros(Float64, num_phases, num_comps)
+    dc_buffer = zeros(Float64, num_phases, num_comps)
+    p_buffer = zeros(Float64, num_phases)
+
     # Iterate until converged. 
     while !test_converged()
 
@@ -216,7 +263,7 @@ function evolve_dynamics(
         while rerun
             rerun = false 
             try 
-                ϕ = iterate_inner(ϕ, χ, ∇t, steps_inner)
+                iterate_inner(ϕ, χ, ∇t, steps_inner, μ_buffer=μ_buffer, p_buffer=p_buffer, dc_buffer=dc_buffer)
             catch err
                 # There was a problem, reduce the time step and retry. 
                 ∇t /= 2

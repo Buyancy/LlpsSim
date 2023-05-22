@@ -20,12 +20,15 @@ function plot_matrix(χ::Matrix{Float64};
     m = maximum(map(abs, χ))
 
     # Set the labels for the volume fractions. 
-    ticks = ["\$Φ_$i\$" for i in 0:N]
+    ticks = ["\$Φ_$i\$" for i in 1:N]
 
     PyPlot.imshow(χ, cmap=:PRGn, clim=(-m,m))
     PyPlot.colorbar()
 
     ax = PyPlot.gca()
+
+    ax.set_xticks(0:(N-1))
+    ax.set_yticks(0:(N-1))
 
     ax.set_xticklabels(ticks)
     ax.set_yticklabels(ticks)

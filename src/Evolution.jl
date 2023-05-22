@@ -226,7 +226,7 @@ function evolutionary_algorithm(
 
     if RETURN_INTERMEDIATES
         intermediate_matrices = Vector{Matrix{Float64}}()
-        intermediate_scores = Vector{Float64}()
+        intermediate_scores = Vector{Vector{Float64}}()
     end
 
 
@@ -234,7 +234,7 @@ function evolutionary_algorithm(
     @showprogress 1 "Evolving matrices..." for i in 1:ITERATIONS
         # Mutate
         # map(mutate_matrix, matrices)
-        for i in 1:N
+        for i in 1:length(matrices)
             mutate_matrix(matrices[i])
         end
 
@@ -248,8 +248,8 @@ function evolutionary_algorithm(
         end
 
         if RETURN_INTERMEDIATES
-            push!(intermediate_matrices,                    first(matrices))
-            push!(intermediate_scores  , objective_function(first(matrices)))
+            push!(intermediate_matrices,                    last(matrices))
+            push!(intermediate_scores  , map(objective_function, matrices))
         end
 
     end # i in 1:ITERATIONS
@@ -284,7 +284,10 @@ function two_phase_objective_function(
     second_target_phase_number::Int,
     w::Float64; 
     n_samples::Int64=32
-)
+)   
+    first_obj = target_phase_objective_function(first_target_phase_number, w, n_samples=n_samples)
+    second_obj = target_phase_objective_function(second_target_phase_number, w, n_samples=n_samples)
+
     @memoize function objective(χ::Matrix{Float64})::Float64
         χ1 = χ
         χ2 = deepcopy(χ)
@@ -296,27 +299,7 @@ function two_phase_objective_function(
             χ2[i,1] = 0
         end
 
-        # Score the two matrices.
-        K_MAX = N+2 
-        samples_1 = LlpsSim.sample_phase_counts(χ1, n_samples=n_samples)
-        samples_2 = LlpsSim.sample_phase_counts(χ2, n_samples=n_samples)
-        l1 = length(samples_1)
-        l2 = length(samples_2) 
-        p1 = [count((x) -> x == k, samples_1) for x in 1:K_MAX]
-        p2 = [count((x) -> x == k, samples_2) for x in 1:K_MAX]
-        P1(k) = p1[k] / l1
-        P2(k) = p2[k] / l2
-        # terms = []
-        s = 0 
-        for K1 in 1:K_MAX
-            for K2 in 1:K_MAX
-                t = exp( -((K1-first_target_phase_number)^2 * (K2-second_target_phase_number)^2) / (2*w^2) ) * P1(K1) * P2(K2)
-                # push!(terms, t)
-                s += t 
-            end
-        end
-        # return sum(terms)
-        return s 
+        return 0.5 * ( first_obj(χ1) + second_obj(χ2) )
     end
 
     return objective 
