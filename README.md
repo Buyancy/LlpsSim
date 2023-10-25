@@ -16,7 +16,7 @@ The "starting conditions" of the simulation is a set of $N+1$ volume fractions w
 ## Component Simulation 
 The simulation takes an initial start state and simulates the dynamics of the change in the different components over time until a stable state is reached. Then the final concentrations of each phase are recorded. The simulation is progressed iteratively using the equation 
 
-$$ \partial_{\hat t}\phi^{(n)}_i = \phi^{(n)}_i \sum_{m=1}^M \left[ \phi^{(m)}_i \left( \hat{\mu_i}^{(m)} -  \hat{\mu_i}^{(n)} \right) + \hat P^{(m)} - \hat P^{(n)} \right] $$
+$` \partial_{\hat t}\phi^{(n)}_i = \phi^{(n)}_i \sum_{m=1}^M \left[ \phi^{(m)}_i \left( \hat{\mu_i}^{(m)} -  \hat{\mu_i}^{(n)} \right) + \hat P^{(m)} - \hat P^{(n)} \right] `$
 
 to update the different component volumes over time until they converge to a steady state. 
 
