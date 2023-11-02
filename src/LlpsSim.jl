@@ -1,7 +1,7 @@
 module LlpsSim
 
 include("Evolution.jl")
-include("Utils.jl")
+# include("Utils.jl")
 
 using Random, Distributions, LinearAlgebra, Distances, Clustering
 using ThreadsX, MultivariateStats, Plots, ProgressMeter, Memoize, LoopVectorization

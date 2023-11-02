@@ -1,133 +1,18 @@
 module Evolution
 
-using LlpsSim, Gen, Statistics, ProgressMeter, Random, Distributions, Memoize
+using LlpsSim, Statistics, ProgressMeter, Random, Distributions, Memoize
 
-"""
-Generate a matrix from a trace. 
-"""
-function matrix_from_trace(trace, N::Int64)::Matrix{Float64}
+
+function generate_uniform_interaction_matrix(N, μ, σ)
     χ = zeros(N,N)
-    for i in 1:N
-        for j in (i+1):N
-            χ[i,j] = Gen.get_choices(trace)[:χ => i => j]
-            χ[j,i] = Gen.get_choices(trace)[:χ => i => j]
-        end
-    end
+    for i ∈ 1:N 
+        for j ∈ i:N
+            χ[i,j] = (randn() * σ) + μ
+            χ[j,i] = χ[i, j]
+        end # for j ∈ i..N
+    end # i ∈ 1..N 
     return χ
-end
-
-"""
-A function to generate an interaction matrix for `N` components drawn from 
-a normal distribution with mean `μ` and standard deviation `σ`^2. 
-"""
-@gen function generate_normal_interaction_matrix(N::Int64, μ::Float64, σ::Float64)
-    χ = zeros(N, N)
-    for i in 1:N
-        for j in (i+1):N
-            χ[i,j] = {i => j} ~ normal(μ, σ) 
-            χ[j,i] = χ[i,j]
-        end
-    end
-    return χ
-end
-
-"""
-A function to generate an interaction matrix for `N` components drawn from 
-a uniform distribution with min `min` and max `max`. 
-"""
-@gen function generate_uniform_interaction_matrix(N::Int64, min::Float64, max::Float64)
-    χ = zeros(N, N)
-    for i in 1:N
-        for j in (i+1):N
-            χ[i,j] = {i => j} ~ uniform(min, max) 
-            χ[j,i] = χ[i,j]
-        end
-    end
-    return χ
-end
-
-"""
-Uses generative modeling (elaborate) to identify interaction matrices that optimize the 
-objective function. 
-"""
-function identify_matrix(N::Int64, objective::Function, target::Float64)
-
-    # The model that we will use to generate and score our function. 
-    @gen function interaction_model() 
-
-        # Build our interaction matrix. 
-        # χ_μ = {:χ_μ} ~ uniform(0, 8)
-        # χ_σ = {:χ_σ} ~ uniform(0, 8)
-        χ = {:χ} ~ generate_uniform_interaction_matrix(N, -2, 5)
-
-        # Get the number of phases in the matrix. 
-        # This may not be nescicary given the objective function. 
-        objective_value = objective(χ)
-
-        {:objective} ~ normal(target, 0.1)
-        
-        return χ
-
-    end # function interaction_model
-
-    # How we will update the model at each iteration of the simulation. 
-    function resimulation_update(trace)
-        # Update the matrix entries. 
-        for i in 1:N
-            for j in (i+1):N
-                trace, accept = mh(trace, select(:χ => i => j))
-            end
-        end
-
-        return trace
-
-    end # function resimulation_update
-
-    # Generate the choicemap that holds what we are optimizing for. 
-    targets = Gen.choicemap()
-    targets[:objective] = target
-
-    scores = []
-
-    trace, weight = generate(interaction_model, (), targets)
-    # for _ in 1:100
-    #     trace = resimulation_update(trace)
-    #     m = mean(LlpsSim.estimate_phase_pdf(Gen.get_retval(trace), n_samples=10))
-    #     push!(scores, m)
-    #     display(m)
-    # end
-
-    @gen function matrix_proposal(trace)
-        for i in 1:N
-            for j in (i+1):N
-                {:χ => i => j} ~ normal(trace[:χ => i => j], 0.1)
-            end
-        end
-    end
-
-    function gaussian_drift_update(trace) 
-        # The drift update. 
-        trace, _ = mh(trace, matrix_proposal, ())
-
-        return trace
-    end
-
-    # trace = simulate(interaction_model, ())
-    # display(Gen.get_choices(trace))
-    # trace, _ = Gen.importance_resampling(interaction_model, (), targets, 300, verbose=true)
-
-    for i in 1:300
-        trace = gaussian_drift_update(trace)
-    end
-
-    display(Gen.get_choices(trace))
-    # display(scores)
-    display(Gen.get_retval(trace))
-    display(mean(LlpsSim.estimate_phase_pdf(Gen.get_retval(trace), n_samples=25)))
-
-end # function identify_matrix_evolution
-
-
+end # function generate_uniform_interaction_matrix
 
 """
 A function that will return a function that is the same as in the paper (Eq. 5)
@@ -171,23 +56,25 @@ Replicate the evolutionary algorithm in the paper to optimize a specific objecti
 - `POPULATION_SIZE::Int64=32`: The number of matrices in the "population" of the algorithm. 
 - `N::Int64=5`: The number of components in the simulation. 
 - `ITERATIONS::Int64=100`: The number of "generations" to use in the algotithm. 
-- `RETURN_INTERMEDIATES::Bool=false`: Whether to return intermediate values in the simulation.
+- `RETURN_INTERMEDIATES::Symbol=:None`: Whether to return intermediate values in the simulation could be one of `:None`, `:Best`, or `:All`.
 - `χ_BOUND::Float64=10.0`: The threshold to use for when we renormalize the matrices. 
 
 # Returns: 
 Will return different things depending on the value of `RETURN_INTERMEDIATES`. 
-If `RETURN_INTERMEDIATES` is false, then it will just return the optimal interaction `Matrix{Float64}`
+If `RETURN_INTERMEDIATES` is `:None`, then it will just return the optimal interaction `Matrix{Float64}`
 that was found through the evolutionary algorithm. 
-If `RETURN_INTERMEDIATES` is true, then it will return a tuple of `(Vector{Matrix{Float64}}, Vector{Float64}, Matrix{Float64})`
+If `RETURN_INTERMEDIATES` is `:Best`, then it will return a tuple of `(Vector{Matrix{Float64}}, Vector{Float64}, Matrix{Float64})`
 where the first two elements contain the best matrix and score from each generation respectively
 and the final element is the best overall matrix obtained by the algorithm. 
+If `RETURN_INTERMEDIATES` is `:All`, then it will return a tuple of `(Vector{Vector{Matrix{Float64}}}, Vector{Vector{Float64}}, Matrix{Float64})`
+where the first two elements contain the 
 """
 function evolutionary_algorithm(
     objective_function;
     POPULATION_SIZE::Int64=32, 
     N::Int64=5, 
     ITERATIONS::Int64=100, 
-    RETURN_INTERMEDIATES::Bool=false, 
+    RETURN_INTERMEDIATES::Symbol=:None, 
     χ_BOUND::Float64=10.0
 ) 
 
@@ -198,14 +85,13 @@ function evolutionary_algorithm(
         push!(matrices, χ)
     end # for _ in 1:POPULATION_SIZE
 
-    println("Finished generating initial matrix population.")
-
+    # println("Finished generating initial matrix population.")
 
     # A function that mutates a single matrix in place. 
     function mutate_matrix(χ::Matrix{Float64})::Matrix{Float64} 
         for i in 1:N
             for j in (i+1):N
-                χ[i,j] = rand(Normal(χ[i,j], 0.1)) # Standard gaussian drift. 
+                χ[i,j] = rand(Normal(χ[i,j], 0.5)) # Standard gaussian drift. 
                 χ[j,i] = χ[i,j]
             end
         end
@@ -224,11 +110,16 @@ function evolutionary_algorithm(
         
     end # function mutate_matrix
 
-    if RETURN_INTERMEDIATES
+    # Initialize return vectors if we need to. 
+    if RETURN_INTERMEDIATES == :Best
         intermediate_matrices = Vector{Matrix{Float64}}()
+        intermediate_scores = Vector{Float64}()
+    elseif RETURN_INTERMEDIATES == :All
+        intermediate_matrices = Vector{Vector{Matrix{Float64}}}()
         intermediate_scores = Vector{Vector{Float64}}()
     end
 
+    # println("Initialized return buffers.")
 
     # Iteratively improve the population. 
     @showprogress 1 "Evolving matrices..." for i in 1:ITERATIONS
@@ -238,8 +129,12 @@ function evolutionary_algorithm(
             mutate_matrix(matrices[i])
         end
 
+        # println("Mutated Matrices")
+
         # Sort the matrices by the scoring function. 
         sort!(matrices, by=objective_function) # Sort the matrices by the objective function. 
+
+        # println("Sorted Matrices")
 
         # Replace the bottom 30%.
         num_to_kill = convert(Int64, floor(length(matrices) * 0.3))
@@ -247,17 +142,26 @@ function evolutionary_algorithm(
             matrices[i] = deepcopy(matrices[end-(i-1)])
         end
 
-        if RETURN_INTERMEDIATES
-            push!(intermediate_matrices,                    last(matrices))
-            push!(intermediate_scores  , map(objective_function, matrices))
+        # println("Selected Matrices")
+
+        # Save the intermediate results if we want to. 
+        if RETURN_INTERMEDIATES == :Best
+            push!(intermediate_matrices, last(matrices))
+            push!(intermediate_scores, objective_function(last(matrices)))
+        elseif RETURN_INTERMEDIATES == :All
+            # TODO: verify that this is correct. 
+            push!(intermediate_matrices, matrices)
+            push!(intermediate_scores, map(objective_function, matrices))
         end
+
+        # println("Saved Intermediates")
 
     end # i in 1:ITERATIONS
 
     # scores = get_score_dict(matrices)
     sort!(matrices, by=objective_function)
 
-    if RETURN_INTERMEDIATES
+    if RETURN_INTERMEDIATES != :None
         return (intermediate_matrices, intermediate_scores, last(matrices))
     else
         return last(matrices)
